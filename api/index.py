@@ -5,16 +5,13 @@ Loads the TF-IDF + classifier pipeline trained in
 `notebooks/email_priority_training.ipynb` and exposes:
 
     GET  /            basic info
-    GET  /health       liveness check
-    POST /predict       {"email": "..."} -> priority + confidence + probabilities
+    GET  /health      liveness check
+    POST /predict     {"email": "..."} -> priority + confidence + probabilities
 
 Run locally:
     uvicorn api.index:app --reload
 Then open:
     http://localhost:8000/docs
-
-Deploy on Vercel: point vercel.json at this file; Vercel's Python runtime
-serves the FastAPI `app` object directly (no Mangum/adapter needed).
 """
 
 import os
@@ -25,8 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 # ---------------------------------------------------------------------------
-# Text cleaning — MUST match notebooks/email_priority_training.ipynb Section 2
-# exactly, or predictions will drift from what the model was trained on.
+# Text cleaning — MUST match notebooks/email_priority_training.ipynb
 # ---------------------------------------------------------------------------
 HEADER_LINE = re.compile(
     r"^(from|to|cc|bcc|subject|date|received|message-id|content-type|"
@@ -54,18 +50,24 @@ def clean_email(text: str) -> str:
 # ---------------------------------------------------------------------------
 # Model loading
 # ---------------------------------------------------------------------------
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "model", "email_priority_model.pkl")
+MODEL_PATH = os.path.join(
+    os.path.dirname(__file__), "model", "email_priority_model.pkl"
+)
 
 _pipeline = None
 _load_error = None
+
 try:
-    _pipeline = joblib.load(MODEL_PATH)
-except Exception as exc:  # noqa: BLE001 - surface any load failure via /health
+    if os.path.exists(MODEL_PATH):
+        _pipeline = joblib.load(MODEL_PATH)
+    else:
+        _load_error = f"Model file not found at path: {MODEL_PATH}"
+except Exception as exc:
     _load_error = str(exc)
 
 
 # ---------------------------------------------------------------------------
-# API
+# API App Initialization
 # ---------------------------------------------------------------------------
 app = FastAPI(
     title="AI Email Priority Classifier",
@@ -75,12 +77,16 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # tighten this to your frontend's origin before going live
+    allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
+# ---------------------------------------------------------------------------
+# Schemas
+# ---------------------------------------------------------------------------
 class EmailRequest(BaseModel):
     email: str = Field(..., min_length=1, description="Raw email text to classify")
 
@@ -88,14 +94,18 @@ class EmailRequest(BaseModel):
 class PredictResponse(BaseModel):
     priority: str
     confidence: float
-    probabilities: dict
+    probabilities: dict[str, float]
 
 
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
 @app.get("/")
 def root():
     return {
-        "name": "AI Email Priority Classifier",
-        "status": "ok" if _pipeline is not None else "model not loaded",
+        "name": "AI Email Priority Classifier API",
+        "status": "ok" if _pipeline is not None else "model_not_loaded",
+        "error": _load_error,
         "endpoints": ["/health", "/predict"],
     }
 
@@ -113,23 +123,40 @@ def predict(req: EmailRequest):
         raise HTTPException(
             status_code=503,
             detail=f"Model not loaded: {_load_error}. "
-            f"Run the training notebook first to create {MODEL_PATH}.",
+            f"Ensure {MODEL_PATH} is committed to GitHub.",
         )
 
+    # 1. Clean input text
     cleaned = clean_email(req.email)
-    if not cleaned:
-        raise HTTPException(status_code=400, detail="Email text is empty after cleaning.")
+    
+    # Fallback to original text if regex cleaning stripped everything
+    input_text = cleaned if len(cleaned) > 0 else req.email.strip()
 
-    proba = _pipeline.predict_proba([cleaned])[0]
-    classes = list(_pipeline.classes_)
-    probabilities = {cls: float(p) for cls, p in zip(classes, proba)}
+    if not input_text:
+        raise HTTPException(
+            status_code=400, detail="Email text cannot be empty."
+        )
 
-    best_idx = int(proba.argmax())
-    priority = classes[best_idx]
-    confidence = float(proba[best_idx])
+    try:
+        # 2. Model inference
+        proba = _pipeline.predict_proba([input_text])[0]
+        classes = list(_pipeline.classes_)
 
-    return PredictResponse(
-        priority=priority.upper(),
-        confidence=confidence,
-        probabilities=probabilities,
-    )
+        # 3. Format probabilities with normalized UPPERCASE keys
+        probabilities = {
+            str(cls).upper(): round(float(p), 4) for cls, p in zip(classes, proba)
+        }
+
+        best_idx = int(proba.argmax())
+        priority = str(classes[best_idx]).upper()
+        confidence = round(float(proba[best_idx]), 4)
+
+        return PredictResponse(
+            priority=priority,
+            confidence=confidence,
+            probabilities=probabilities,
+        )
+    except Exception as err:
+        raise HTTPException(
+            status_code=500, detail=f"Prediction error: {str(err)}"
+        )
