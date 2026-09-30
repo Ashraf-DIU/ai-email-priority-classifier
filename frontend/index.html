@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mail Triage — AI Email Priority Classifier</title>
+<meta name="description" content="Paste an email and get back its priority — high, medium or low — from a TF-IDF and logistic regression model.">
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap header-inner">
+    <a class="mark" href="/">
+      <span class="mark-glyph" aria-hidden="true"></span>
+      Mail Triage
+    </a>
+    <nav class="header-nav">
+      <a href="/docs" target="_blank" rel="noopener">API reference</a>
+      <a href="https://github.com/" target="_blank" rel="noopener" id="repo-link">Source</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+  <section class="intro wrap">
+    <h1>How urgent is this email, really?</h1>
+    <p>Paste the text of an email below. A model trained on the SpamAssassin corpus
+       scores it <strong>high</strong>, <strong>medium</strong> or <strong>low</strong>
+       priority and shows its confidence — no inbox connection required.</p>
+  </section>
+
+  <section class="console wrap" aria-label="Email priority analyzer">
+
+    <div class="pane pane-input">
+      <div class="pane-head">
+        <h2>Email text</h2>
+        <span class="pane-hint">Paste the body, or try an example</span>
+      </div>
+
+      <div class="chips" id="example-chips">
+        <button type="button" class="chip" data-example="interview">Interview request</button>
+        <button type="button" class="chip" data-example="report">Report reminder</button>
+        <button type="button" class="chip" data-example="newsletter">Newsletter</button>
+      </div>
+
+      <textarea
+        id="email-input"
+        placeholder="Dear Applicant, your interview has been scheduled for tomorrow at 10:00 AM. Please confirm your attendance."
+        aria-label="Email text to analyze"
+        rows="10"
+      ></textarea>
+
+      <div class="input-row">
+        <span class="char-count" id="char-count">0 characters</span>
+        <button type="button" class="btn-primary" id="analyze-btn">
+          <span class="btn-label">Analyze email</span>
+          <span class="btn-spinner" aria-hidden="true"></span>
+        </button>
+      </div>
+      <p class="error-msg" id="error-msg" role="alert" hidden></p>
+    </div>
+
+    <div class="pane pane-result">
+      <div class="pane-head">
+        <h2>Result</h2>
+        <button type="button" class="raw-toggle" id="raw-toggle" hidden>View raw response</button>
+      </div>
+
+      <div class="result-empty" id="result-empty">
+        <p>Nothing analyzed yet. Paste an email on the left and run it through the model.</p>
+      </div>
+
+      <div class="result-body" id="result-body" hidden aria-live="polite">
+        <div class="priority-flag" id="priority-flag">
+          <span class="flag-dot" aria-hidden="true"></span>
+          <span class="flag-label" id="flag-label">—</span>
+          <span class="flag-confidence" id="flag-confidence">—</span>
+        </div>
+
+        <div class="prob-list" id="prob-list">
+          <div class="prob-row" data-cls="high">
+            <span class="prob-name">High</span>
+            <span class="prob-track"><span class="prob-fill" id="fill-high"></span></span>
+            <span class="prob-value" id="value-high">0.000</span>
+          </div>
+          <div class="prob-row" data-cls="medium">
+            <span class="prob-name">Medium</span>
+            <span class="prob-track"><span class="prob-fill" id="fill-medium"></span></span>
+            <span class="prob-value" id="value-medium">0.000</span>
+          </div>
+          <div class="prob-row" data-cls="low">
+            <span class="prob-name">Low</span>
+            <span class="prob-track"><span class="prob-fill" id="fill-low"></span></span>
+            <span class="prob-value" id="value-low">0.000</span>
+          </div>
+        </div>
+
+        <pre class="raw-json" id="raw-json" hidden></pre>
+      </div>
+    </div>
+
+  </section>
+
+  <section class="flow wrap" aria-label="How it works">
+    <div class="flow-step">
+      <span class="flow-index">Paste</span>
+      <p>Drop in the email text — headers, HTML and links are stripped automatically.</p>
+    </div>
+    <span class="flow-arrow" aria-hidden="true">→</span>
+    <div class="flow-step">
+      <span class="flow-index">Analyze</span>
+      <p>TF-IDF features feed a logistic regression classifier trained on labelled email text.</p>
+    </div>
+    <span class="flow-arrow" aria-hidden="true">→</span>
+    <div class="flow-step">
+      <span class="flow-index">Priority</span>
+      <p>Back comes a priority class with a full confidence breakdown, in under a second.</p>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap footer-inner">
+    <p>TF-IDF + logistic regression, served with FastAPI. Trained on the
+       <a href="https://www.kaggle.com/datasets/ganiyuolalekan/spam-assassin-email-classification-dataset" target="_blank" rel="noopener">Spam Assassin</a>
+       corpus with rule-based priority labels.</p>
+  </div>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>

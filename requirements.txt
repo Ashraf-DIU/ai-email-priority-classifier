@@ -1,0 +1,9 @@
+# Runtime dependencies for the deployed API (api/index.py).
+# For training the model (notebooks/email_priority_training.ipynb),
+# also install: pandas, matplotlib, seaborn, jupyter, nbformat, ipykernel
+
+fastapi==0.115.6
+uvicorn==0.34.0
+pydantic==2.10.4
+scikit-learn==1.5.2
+joblib==1.4.2

@@ -1,0 +1,35 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+.pytest_cache/
+
+# --- Jupyter ---
+.ipynb_checkpoints/
+
+# --- Vercel / Node (frontend tooling, if any gets added later) ---
+.vercel/
+node_modules/
+
+# --- Environment / secrets ---
+.env
+.env.local
+.env*.local
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+
+# --- Dataset ---
+# The Kaggle CSV is not redistributed in this repo — see data/README.md.
+data/*.csv
+
+# --- NOTE ---
+# api/model/email_priority_model.pkl and model_info.json are NOT ignored.
+# They're the trained model the deployed API loads at request time — Vercel
+# doesn't run the training notebook at build time, so these files must be
+# committed for the API to work in production.
