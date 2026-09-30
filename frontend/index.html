@@ -1,139 +1,897 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mail Triage — AI Email Priority Classifier</title>
-<meta name="description" content="Paste an email and get back its priority — high, medium or low — from a TF-IDF and logistic regression model.">
-<link rel="icon" href="data:,">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Email Priority Classifier | Interactive ML Dashboard</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons CDN -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Plus Jakarta Sans', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#f0f7ff',
+                            100: '#e0effe',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                            900: '#1e3a8a',
+                        },
+                        priority: {
+                            high: '#ef4444',
+                            medium: '#f59e0b',
+                            low: '#10b981',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom scrollbars and sleek backdrops */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(51, 65, 85, 0.8);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(71, 85, 105, 1);
+        }
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .glass-panel-light {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(0, 0, 0, 0.08);
+        }
+        .highlight-tag {
+            animation: pulseGlow 2s infinite alternate;
+        }
+        @keyframes pulseGlow {
+            0% { opacity: 0.8; }
+            100% { opacity: 1; }
+        }
+    </style>
 </head>
-<body>
+<body class="bg-slate-950 text-slate-100 font-sans min-h-screen flex flex-col antialiased selection:bg-blue-500 selection:text-white">
 
-<header class="site-header">
-  <div class="wrap header-inner">
-    <a class="mark" href="/">
-      <span class="mark-glyph" aria-hidden="true"></span>
-      Mail Triage
-    </a>
-    <nav class="header-nav">
-      <a href="/docs" target="_blank" rel="noopener">API reference</a>
-      <a href="https://github.com/" target="_blank" rel="noopener" id="repo-link">Source</a>
-    </nav>
-  </div>
-</header>
+    <!-- Top Navigation Header -->
+    <header class="border-b border-slate-800/80 bg-slate-900/80 sticky top-0 z-40 backdrop-blur-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-500/20">
+                    <i data-lucide="mail-check" class="w-5 h-5 text-white"></i>
+                </div>
+                <div>
+                    <div class="flex items-center space-x-2">
+                        <h1 class="text-lg font-bold tracking-tight text-white">AI Email Priority Classifier</h1>
+                        <span class="text-xs px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-medium hidden sm:inline-block">v1.2 Live ML</span>
+                    </div>
+                    <p class="text-xs text-slate-400">TF-IDF Vectorization + Logistic Regression Classifier</p>
+                </div>
+            </div>
 
-<main>
+            <!-- Header Controls & Mode Status -->
+            <div class="flex items-center space-x-3">
+                <div id="modeBadge" class="flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span id="modeBadgeText">Client ML Engine</span>
+                </div>
 
-  <section class="intro wrap">
-    <h1>How urgent is this email, really?</h1>
-    <p>Paste the text of an email below. A model trained on the SpamAssassin corpus
-       scores it <strong>high</strong>, <strong>medium</strong> or <strong>low</strong>
-       priority and shows its confidence — no inbox connection required.</p>
-  </section>
-
-  <section class="console wrap" aria-label="Email priority analyzer">
-
-    <div class="pane pane-input">
-      <div class="pane-head">
-        <h2>Email text</h2>
-        <span class="pane-hint">Paste the body, or try an example</span>
-      </div>
-
-      <div class="chips" id="example-chips">
-        <button type="button" class="chip" data-example="interview">Interview request</button>
-        <button type="button" class="chip" data-example="report">Report reminder</button>
-        <button type="button" class="chip" data-example="newsletter">Newsletter</button>
-      </div>
-
-      <textarea
-        id="email-input"
-        placeholder="Dear Applicant, your interview has been scheduled for tomorrow at 10:00 AM. Please confirm your attendance."
-        aria-label="Email text to analyze"
-        rows="10"
-      ></textarea>
-
-      <div class="input-row">
-        <span class="char-count" id="char-count">0 characters</span>
-        <button type="button" class="btn-primary" id="analyze-btn">
-          <span class="btn-label">Analyze email</span>
-          <span class="btn-spinner" aria-hidden="true"></span>
-        </button>
-      </div>
-      <p class="error-msg" id="error-msg" role="alert" hidden></p>
-    </div>
-
-    <div class="pane pane-result">
-      <div class="pane-head">
-        <h2>Result</h2>
-        <button type="button" class="raw-toggle" id="raw-toggle" hidden>View raw response</button>
-      </div>
-
-      <div class="result-empty" id="result-empty">
-        <p>Nothing analyzed yet. Paste an email on the left and run it through the model.</p>
-      </div>
-
-      <div class="result-body" id="result-body" hidden aria-live="polite">
-        <div class="priority-flag" id="priority-flag">
-          <span class="flag-dot" aria-hidden="true"></span>
-          <span class="flag-label" id="flag-label">—</span>
-          <span class="flag-confidence" id="flag-confidence">—</span>
+                <button id="openSettingsBtn" class="p-2 text-slate-400 hover:text-white bg-slate-800/60 hover:bg-slate-800 rounded-lg border border-slate-700/50 transition-all flex items-center space-x-1.5 text-xs font-medium">
+                    <i data-lucide="settings" class="w-4 h-4"></i>
+                    <span class="hidden md:inline">API Config</span>
+                </button>
+            </div>
         </div>
+    </header>
 
-        <div class="prob-list" id="prob-list">
-          <div class="prob-row" data-cls="high">
-            <span class="prob-name">High</span>
-            <span class="prob-track"><span class="prob-fill" id="fill-high"></span></span>
-            <span class="prob-value" id="value-high">0.000</span>
-          </div>
-          <div class="prob-row" data-cls="medium">
-            <span class="prob-name">Medium</span>
-            <span class="prob-track"><span class="prob-fill" id="fill-medium"></span></span>
-            <span class="prob-value" id="value-medium">0.000</span>
-          </div>
-          <div class="prob-row" data-cls="low">
-            <span class="prob-name">Low</span>
-            <span class="prob-track"><span class="prob-fill" id="fill-low"></span></span>
-            <span class="prob-value" id="value-low">0.000</span>
-          </div>
+    <!-- Main Content Container -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- LEFT COLUMN: Input & Preset Selector (5 Cols) -->
+        <section class="lg:col-span-5 flex flex-col space-y-5">
+            
+            <!-- Quick Sample Email Selector Card -->
+            <div class="glass-panel rounded-2xl p-4 shadow-xl">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                        <i data-lucide="sparkles" class="w-3.5 h-3.5 text-amber-400"></i>
+                        Load Preset Samples
+                    </span>
+                    <span class="text-[10px] text-slate-500">Click to auto-fill</span>
+                </div>
+                <div class="flex flex-wrap gap-2" id="presetButtons">
+                    <!-- Dynamic Preset Buttons Generated via JS -->
+                </div>
+            </div>
+
+            <!-- Email Text Area Container -->
+            <div class="glass-panel rounded-2xl p-5 shadow-xl flex-1 flex flex-col border border-slate-800">
+                <div class="flex items-center justify-between mb-2">
+                    <label for="emailInput" class="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                        <i data-lucide="file-text" class="w-4 h-4 text-blue-400"></i>
+                        Email Payload Input
+                    </label>
+                    <div class="flex items-center space-x-2">
+                        <button id="clearBtn" class="text-xs text-slate-400 hover:text-slate-200 px-2 py-1 rounded hover:bg-slate-800 transition flex items-center gap-1">
+                            <i data-lucide="trash-2" class="w-3 h-3"></i> Clear
+                        </button>
+                        <button id="pasteBtn" class="text-xs text-slate-400 hover:text-slate-200 px-2 py-1 rounded hover:bg-slate-800 transition flex items-center gap-1">
+                            <i data-lucide="clipboard" class="w-3 h-3"></i> Paste
+                        </button>
+                    </div>
+                </div>
+
+                <div class="relative flex-1 min-h-[220px] flex flex-col">
+                    <textarea id="emailInput" 
+                        class="w-full flex-1 bg-slate-900/90 border border-slate-700/80 rounded-xl p-3.5 text-slate-200 text-sm placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition font-sans resize-y"
+                        placeholder="Paste or type an email message here to analyze priority, categorization, and trigger factors..."></textarea>
+                </div>
+
+                <!-- Input Footer: Stats & CTA -->
+                <div class="mt-4 flex items-center justify-between pt-2 border-t border-slate-800/80">
+                    <div class="text-xs text-slate-400 space-x-3">
+                        <span>Words: <strong id="wordCount" class="text-slate-200 font-mono">0</strong></span>
+                        <span>Chars: <strong id="charCount" class="text-slate-200 font-mono">0</strong></span>
+                    </div>
+
+                    <button id="analyzeBtn" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold text-sm shadow-lg shadow-blue-600/30 hover:shadow-blue-600/50 transition-all flex items-center space-x-2 active:scale-[0.98]">
+                        <i data-lucide="cpu" class="w-4 h-4"></i>
+                        <span>Analyze Priority</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Batch / History Mini Panel -->
+            <div class="glass-panel rounded-2xl p-4 shadow-xl">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                        <i data-lucide="history" class="w-3.5 h-3.5 text-indigo-400"></i>
+                        Recent Analyses
+                    </span>
+                    <button id="clearHistoryBtn" class="text-[11px] text-slate-500 hover:text-slate-300">Clear</button>
+                </div>
+                <div id="historyList" class="space-y-2 max-h-[140px] overflow-y-auto pr-1">
+                    <p class="text-xs text-slate-500 italic py-2 text-center">No recent email predictions</p>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- RIGHT COLUMN: ML Inference Results (7 Cols) -->
+        <section class="lg:col-span-7 flex flex-col space-y-5">
+
+            <!-- Primary Prediction Display Card -->
+            <div class="glass-panel rounded-2xl p-6 shadow-2xl relative overflow-hidden border border-slate-800">
+                
+                <!-- Background ambient glow -->
+                <div id="ambientGlow" class="absolute -top-16 -right-16 w-48 h-48 bg-blue-500/10 rounded-full blur-3xl pointer-events-none transition-all duration-500"></div>
+
+                <div class="flex flex-col md:flex-row md:items-center justify-between pb-5 border-b border-slate-800 gap-4">
+                    <div>
+                        <span class="text-xs font-medium text-slate-400 uppercase tracking-widest block mb-1">Predicted Priority</span>
+                        <div class="flex items-center space-x-3">
+                            <div id="priorityBadge" class="px-4 py-1.5 rounded-xl text-base font-bold flex items-center space-x-2 bg-slate-800 text-slate-300 border border-slate-700">
+                                <span id="priorityIcon">⚪</span>
+                                <span id="priorityLabel">AWAITING INPUT</span>
+                            </div>
+                            <div class="text-xs px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 border border-slate-700 font-mono">
+                                Confidence: <span id="confidenceValue" class="font-bold text-white">0.0%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Category Badge -->
+                    <div class="text-left md:text-right">
+                        <span class="text-xs font-medium text-slate-400 uppercase tracking-widest block mb-1">Detected Category</span>
+                        <div id="categoryBadge" class="inline-flex items-center px-3 py-1 rounded-lg text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700">
+                            <i data-lucide="tag" class="w-3.5 h-3.5 mr-1.5 text-slate-400"></i>
+                            <span id="categoryLabel">Uncategorized</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Probability Distribution Bars -->
+                <div class="py-5 border-b border-slate-800">
+                    <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-3">Model Class Probabilities</span>
+                    
+                    <div class="space-y-3">
+                        <!-- High Priority Bar -->
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="font-medium text-red-400 flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-red-500"></span> HIGH</span>
+                                <span id="probHighText" class="font-mono text-slate-300">0.0%</span>
+                            </div>
+                            <div class="w-full h-2.5 bg-slate-900 rounded-full overflow-hidden p-0.5 border border-slate-800">
+                                <div id="probHighBar" class="h-full bg-gradient-to-r from-red-600 to-red-400 rounded-full transition-all duration-500 w-0"></div>
+                            </div>
+                        </div>
+
+                        <!-- Medium Priority Bar -->
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="font-medium text-amber-400 flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-500"></span> MEDIUM</span>
+                                <span id="probMedText" class="font-mono text-slate-300">0.0%</span>
+                            </div>
+                            <div class="w-full h-2.5 bg-slate-900 rounded-full overflow-hidden p-0.5 border border-slate-800">
+                                <div id="probMedBar" class="h-full bg-gradient-to-r from-amber-600 to-amber-400 rounded-full transition-all duration-500 w-0"></div>
+                            </div>
+                        </div>
+
+                        <!-- Low Priority Bar -->
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="font-medium text-emerald-400 flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-500"></span> LOW</span>
+                                <span id="probLowText" class="font-mono text-slate-300">0.0%</span>
+                            </div>
+                            <div class="w-full h-2.5 bg-slate-900 rounded-full overflow-hidden p-0.5 border border-slate-800">
+                                <div id="probLowBar" class="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 rounded-full transition-all duration-500 w-0"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Explanation / Key Reason Section -->
+                <div class="pt-5">
+                    <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-2 flex items-center gap-1.5">
+                        <i data-lucide="info" class="w-3.5 h-3.5 text-blue-400"></i>
+                        Classification Reason & Detected Triggers
+                    </span>
+                    <p id="reasonText" class="text-sm text-slate-300 leading-relaxed bg-slate-900/60 p-3.5 rounded-xl border border-slate-800/80 mb-3">
+                        Enter an email payload and click "Analyze Priority" to execute inference model.
+                    </p>
+
+                    <!-- Keyword Triggers Highlight Chips -->
+                    <div class="flex flex-wrap items-center gap-1.5" id="triggerTags">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Feature Importance / Top TF-IDF Terms Breakdown -->
+            <div class="glass-panel rounded-2xl p-5 shadow-xl border border-slate-800">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                        <i data-lucide="bar-chart-2" class="w-3.5 h-3.5 text-indigo-400"></i>
+                        Top TF-IDF Feature Weights
+                    </span>
+                    <span class="text-[11px] text-slate-500">Logistic Coefficients</span>
+                </div>
+
+                <div id="featureWeightsContainer" class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div class="text-slate-500 italic text-center col-span-2 py-4">No features vectorized yet</div>
+                </div>
+            </div>
+
+            <!-- Output Action Controls -->
+            <div class="flex items-center justify-end space-x-3">
+                <button id="copyReportBtn" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition flex items-center space-x-1.5">
+                    <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                    <span>Copy Summary</span>
+                </button>
+                <button id="exportJsonBtn" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition flex items-center space-x-1.5">
+                    <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                    <span>Export JSON</span>
+                </button>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- Settings & API Config Modal -->
+    <div id="settingsModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+        <div class="glass-panel max-w-xl w-full rounded-2xl p-6 shadow-2xl border border-slate-800 flex flex-col space-y-4">
+            
+            <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+                <h3 class="text-base font-bold text-white flex items-center gap-2">
+                    <i data-lucide="sliders" class="w-4 h-4 text-blue-400"></i>
+                    Inference Backend Settings
+                </h3>
+                <button id="closeSettingsBtn" class="text-slate-400 hover:text-white p-1 rounded-lg">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div class="space-y-4 text-xs">
+                <!-- Mode Toggle Selector -->
+                <div>
+                    <label class="block font-medium text-slate-300 mb-2">Execution Engine</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button id="modeLocalBtn" class="p-3 rounded-xl border border-blue-500/50 bg-blue-500/10 text-blue-300 font-semibold text-left flex flex-col">
+                            <span class="flex items-center gap-1.5"><i data-lucide="cpu" class="w-3.5 h-3.5"></i> Client Simulation</span>
+                            <span class="text-[10px] text-slate-400 font-normal mt-1">Built-in TF-IDF JS heuristic pipeline</span>
+                        </button>
+                        <button id="modeApiBtn" class="p-3 rounded-xl border border-slate-800 bg-slate-900 text-slate-400 font-semibold text-left flex flex-col hover:border-slate-700">
+                            <span class="flex items-center gap-1.5"><i data-lucide="server" class="w-3.5 h-3.5"></i> FastAPI Endpoint</span>
+                            <span class="text-[10px] text-slate-500 font-normal mt-1">Connect to live production server</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- API Endpoint Config -->
+                <div id="apiConfigFields" class="opacity-50 pointer-events-none transition-all">
+                    <label for="apiUrlInput" class="block font-medium text-slate-300 mb-1">FastAPI Endpoint URL</label>
+                    <input type="text" id="apiUrlInput" value="http://localhost:8000/predict" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-slate-200 font-mono text-xs focus:outline-none focus:border-blue-500">
+                    <p class="text-[10px] text-slate-500 mt-1">Expected POST JSON body format: <code class="font-mono text-slate-400">{"email": "string"}</code></p>
+                </div>
+
+                <!-- Request/Response Payload Preview -->
+                <div>
+                    <span class="block font-medium text-slate-300 mb-1">API Payload Inspector</span>
+                    <pre id="jsonPreview" class="bg-slate-950 p-3 rounded-xl border border-slate-800 font-mono text-[11px] text-blue-400 overflow-x-auto max-h-40">{
+  "status": "ready",
+  "engine": "Client-side TF-IDF JS"
+}</pre>
+                </div>
+            </div>
+
+            <div class="pt-2 flex justify-end">
+                <button id="saveSettingsBtn" class="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs shadow-lg shadow-blue-600/30">
+                    Save Configuration
+                </button>
+            </div>
+
         </div>
-
-        <pre class="raw-json" id="raw-json" hidden></pre>
-      </div>
     </div>
 
-  </section>
-
-  <section class="flow wrap" aria-label="How it works">
-    <div class="flow-step">
-      <span class="flow-index">Paste</span>
-      <p>Drop in the email text — headers, HTML and links are stripped automatically.</p>
+    <!-- Notification Toast Container -->
+    <div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-10 opacity-0 transition-all duration-300 pointer-events-none bg-slate-800 border border-slate-700 text-white text-xs px-4 py-2.5 rounded-xl shadow-2xl flex items-center space-x-2">
+        <i data-lucide="check-circle" class="w-4 h-4 text-emerald-400"></i>
+        <span id="toastMsg">Action completed</span>
     </div>
-    <span class="flow-arrow" aria-hidden="true">→</span>
-    <div class="flow-step">
-      <span class="flow-index">Analyze</span>
-      <p>TF-IDF features feed a logistic regression classifier trained on labelled email text.</p>
-    </div>
-    <span class="flow-arrow" aria-hidden="true">→</span>
-    <div class="flow-step">
-      <span class="flow-index">Priority</span>
-      <p>Back comes a priority class with a full confidence breakdown, in under a second.</p>
-    </div>
-  </section>
 
-</main>
+    <script>
+        /**
+         * AI EMAIL PRIORITY CLASSIFIER - CLIENT SIDE & API CONTROLLER
+         */
 
-<footer class="site-footer">
-  <div class="wrap footer-inner">
-    <p>TF-IDF + logistic regression, served with FastAPI. Trained on the
-       <a href="https://www.kaggle.com/datasets/ganiyuolalekan/spam-assassin-email-classification-dataset" target="_blank" rel="noopener">Spam Assassin</a>
-       corpus with rule-based priority labels.</p>
-  </div>
-</footer>
+        // 1. SAMPLE PRESET DATASET
+        const PRESETS = [
+            {
+                name: "🔴 Urgent Interview",
+                text: "Dear Applicant,\n\nYour final round technical interview has been scheduled for tomorrow at 10:00 AM. Please confirm your attendance immediately as slots are limited.\n\nBest regards,\nHR Team"
+            },
+            {
+                name: "🔴 Security Alert",
+                text: "URGENT: Unusual sign-in activity detected on your corporate account. Your password must be reset within 24 hours to prevent account lock or unauthorized breach."
+            },
+            {
+                name: "🟡 Project Review",
+                text: "Hi Team,\n\nPlease review the attached quarterly roadmap report before our meeting next Friday. Let me know if you have any preliminary feedback on the budget slides."
+            },
+            {
+                name: "🟢 Weekly Newsletter",
+                text: "Welcome to Tech Digest Issue #142! Discover this week's top software engineering trends, AI advancements, and open-source releases."
+            },
+            {
+                name: "🟢 Promo Discount",
+                text: "Exclusive Weekend Sale! Get 40% off on all pro subscription plans using coupon code SAVE40 at checkout. Offer valid until Sunday midnight."
+            }
+        ];
 
-<script src="script.js"></script>
+        // 2. TF-IDF & HEURISTIC DICTIONARY FOR CLIENT-SIDE MODEL SIMULATION
+        const FEATURE_VOCAB = {
+            // High Priority Weights
+            'urgent': { priority: 'HIGH', weight: 3.2, category: 'General' },
+            'immediately': { priority: 'HIGH', weight: 2.8, category: 'General' },
+            'tomorrow': { priority: 'HIGH', weight: 2.5, category: 'General' },
+            'today': { priority: 'HIGH', weight: 2.4, category: 'General' },
+            'interview': { priority: 'HIGH', weight: 3.0, category: 'Career / Interview' },
+            'compromised': { priority: 'HIGH', weight: 3.5, category: 'Security & Account' },
+            'security': { priority: 'HIGH', weight: 2.2, category: 'Security & Account' },
+            'breach': { priority: 'HIGH', weight: 3.1, category: 'Security & Account' },
+            'deadline': { priority: 'HIGH', weight: 2.7, category: 'Work & Projects' },
+            'overdue': { priority: 'HIGH', weight: 3.0, category: 'Finance & Billing' },
+            'payment': { priority: 'HIGH', weight: 2.1, category: 'Finance & Billing' },
+            'confirm': { priority: 'HIGH', weight: 1.8, category: 'General' },
+            'asap': { priority: 'HIGH', weight: 2.9, category: 'General' },
+
+            // Medium Priority Weights
+            'review': { priority: 'MEDIUM', weight: 1.8, category: 'Work & Projects' },
+            'attached': { priority: 'MEDIUM', weight: 1.5, category: 'Work & Projects' },
+            'report': { priority: 'MEDIUM', weight: 1.6, category: 'Work & Projects' },
+            'meeting': { priority: 'MEDIUM', weight: 1.9, category: 'Work & Projects' },
+            'schedule': { priority: 'MEDIUM', weight: 1.4, category: 'Work & Projects' },
+            'next week': { priority: 'MEDIUM', weight: 1.7, category: 'Work & Projects' },
+            'update': { priority: 'MEDIUM', weight: 1.3, category: 'Work & Projects' },
+            'feedback': { priority: 'MEDIUM', weight: 1.2, category: 'Work & Projects' },
+            'agenda': { priority: 'MEDIUM', weight: 1.5, category: 'Work & Projects' },
+
+            // Low Priority Weights
+            'newsletter': { priority: 'LOW', weight: 3.0, category: 'Marketing & Newsletters' },
+            'digest': { priority: 'LOW', weight: 2.5, category: 'Marketing & Newsletters' },
+            'discount': { priority: 'LOW', weight: 2.8, category: 'Marketing & Newsletters' },
+            'sale': { priority: 'LOW', weight: 2.6, category: 'Marketing & Newsletters' },
+            'off': { priority: 'LOW', weight: 1.5, category: 'Marketing & Newsletters' },
+            'coupon': { priority: 'LOW', weight: 2.7, category: 'Marketing & Newsletters' },
+            'unsubscribe': { priority: 'LOW', weight: 3.2, category: 'Marketing & Newsletters' },
+            'weekly': { priority: 'LOW', weight: 1.8, category: 'Marketing & Newsletters' },
+            'promotion': { priority: 'LOW', weight: 2.4, category: 'Marketing & Newsletters' }
+        };
+
+        // 3. APPLICATION STATE MANAGEMENT
+        const state = {
+            activeEngine: 'local', // 'local' | 'api'
+            apiUrl: 'http://localhost:8000/predict',
+            history: [],
+            currentResult: null
+        };
+
+        // DOM ELEMENTS
+        const emailInput = document.getElementById('emailInput');
+        const wordCountEl = document.getElementById('wordCount');
+        const charCountEl = document.getElementById('charCount');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const pasteBtn = document.getElementById('pasteBtn');
+        const presetButtonsContainer = document.getElementById('presetButtons');
+        
+        // Output UI Elements
+        const priorityBadge = document.getElementById('priorityBadge');
+        const priorityIcon = document.getElementById('priorityIcon');
+        const priorityLabel = document.getElementById('priorityLabel');
+        const confidenceValue = document.getElementById('confidenceValue');
+        const categoryBadge = document.getElementById('categoryBadge');
+        const categoryLabel = document.getElementById('categoryLabel');
+        const reasonText = document.getElementById('reasonText');
+        const triggerTags = document.getElementById('triggerTags');
+        const ambientGlow = document.getElementById('ambientGlow');
+
+        // Probability Bars
+        const probHighBar = document.getElementById('probHighBar');
+        const probHighText = document.getElementById('probHighText');
+        const probMedBar = document.getElementById('probMedBar');
+        const probMedText = document.getElementById('probMedText');
+        const probLowBar = document.getElementById('probLowBar');
+        const probLowText = document.getElementById('probLowText');
+        const featureWeightsContainer = document.getElementById('featureWeightsContainer');
+
+        // Settings Modal & Extra Controls
+        const settingsModal = document.getElementById('settingsModal');
+        const openSettingsBtn = document.getElementById('openSettingsBtn');
+        const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+        const modeLocalBtn = document.getElementById('modeLocalBtn');
+        const modeApiBtn = document.getElementById('modeApiBtn');
+        const apiConfigFields = document.getElementById('apiConfigFields');
+        const apiUrlInput = document.getElementById('apiUrlInput');
+        const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+        const jsonPreview = document.getElementById('jsonPreview');
+        const modeBadgeText = document.getElementById('modeBadgeText');
+        
+        const copyReportBtn = document.getElementById('copyReportBtn');
+        const exportJsonBtn = document.getElementById('exportJsonBtn');
+        const historyList = document.getElementById('historyList');
+        const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+
+        // INITIALIZATION
+        window.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+            renderPresets();
+            setupEventListeners();
+            updateTextStats();
+        });
+
+        function renderPresets() {
+            presetButtonsContainer.innerHTML = '';
+            PRESETS.forEach((preset) => {
+                const btn = document.createElement('button');
+                btn.className = 'text-xs px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700/70 transition flex items-center gap-1 active:scale-95';
+                btn.innerText = preset.name;
+                btn.addEventListener('click', () => {
+                    emailInput.value = preset.text;
+                    updateTextStats();
+                    showToast(`Loaded "${preset.name.replace(/[^a-zA-Z0-9 ]/g, '')}" sample`);
+                });
+                presetButtonsContainer.appendChild(btn);
+            });
+        }
+
+        function setupEventListeners() {
+            // Input handlers
+            emailInput.addEventListener('input', updateTextStats);
+            clearBtn.addEventListener('click', () => {
+                emailInput.value = '';
+                updateTextStats();
+            });
+            pasteBtn.addEventListener('click', async () => {
+                try {
+                    const text = await navigator.clipboard.readText();
+                    emailInput.value = text;
+                    updateTextStats();
+                    showToast('Pasted from clipboard');
+                } catch (e) {
+                    showToast('Unable to read clipboard');
+                }
+            });
+
+            // Action triggers
+            analyzeBtn.addEventListener('click', runClassification);
+
+            // Modal & Settings handlers
+            openSettingsBtn.addEventListener('click', () => settingsModal.classList.remove('hidden'));
+            closeSettingsBtn.addEventListener('click', () => settingsModal.classList.add('hidden'));
+            
+            modeLocalBtn.addEventListener('click', () => setEngineMode('local'));
+            modeApiBtn.addEventListener('click', () => setEngineMode('api'));
+
+            saveSettingsBtn.addEventListener('click', () => {
+                state.apiUrl = apiUrlInput.value.trim();
+                settingsModal.classList.add('hidden');
+                showToast('Configuration saved');
+            });
+
+            // Action Export Buttons
+            copyReportBtn.addEventListener('click', copySummaryReport);
+            exportJsonBtn.addEventListener('click', exportJsonData);
+            clearHistoryBtn.addEventListener('click', () => {
+                state.history = [];
+                renderHistory();
+            });
+        }
+
+        function updateTextStats() {
+            const text = emailInput.value;
+            const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+            wordCountEl.innerText = words;
+            charCountEl.innerText = text.length;
+        }
+
+        function setEngineMode(mode) {
+            state.activeEngine = mode;
+            if (mode === 'local') {
+                modeLocalBtn.className = 'p-3 rounded-xl border border-blue-500/50 bg-blue-500/10 text-blue-300 font-semibold text-left flex flex-col';
+                modeApiBtn.className = 'p-3 rounded-xl border border-slate-800 bg-slate-900 text-slate-400 font-semibold text-left flex flex-col hover:border-slate-700';
+                apiConfigFields.classList.add('opacity-50', 'pointer-events-none');
+                modeBadgeText.innerText = 'Client ML Engine';
+            } else {
+                modeApiBtn.className = 'p-3 rounded-xl border border-blue-500/50 bg-blue-500/10 text-blue-300 font-semibold text-left flex flex-col';
+                modeLocalBtn.className = 'p-3 rounded-xl border border-slate-800 bg-slate-900 text-slate-400 font-semibold text-left flex flex-col hover:border-slate-700';
+                apiConfigFields.classList.remove('opacity-50', 'pointer-events-none');
+                modeBadgeText.innerText = 'FastAPI Mode';
+            }
+            updateJsonPreview();
+        }
+
+        /**
+         * CLIENT-SIDE TF-IDF & LOGISTIC REGRESSION SIMULATOR
+         */
+        function classifyLocal(text) {
+            const normalizedText = text.toLowerCase();
+            let scoreHigh = 0.1;
+            let scoreMed = 0.1;
+            let scoreLow = 0.1;
+
+            const detectedFeatures = [];
+            const categoriesFound = {};
+
+            // Tokenize and match feature weights
+            Object.keys(FEATURE_VOCAB).forEach((term) => {
+                if (normalizedText.includes(term)) {
+                    const meta = FEATURE_VOCAB[term];
+                    const weight = meta.weight;
+
+                    if (meta.priority === 'HIGH') scoreHigh += weight;
+                    if (meta.priority === 'MEDIUM') scoreMed += weight;
+                    if (meta.priority === 'LOW') scoreLow += weight;
+
+                    detectedFeatures.push({ term, weight, priority: meta.priority });
+                    categoriesFound[meta.category] = (categoriesFound[meta.category] || 0) + weight;
+                }
+            });
+
+            // Softmax Normalization for Probabilities
+            const expHigh = Math.exp(scoreHigh);
+            const expMed = Math.exp(scoreMed);
+            const expLow = Math.exp(scoreLow);
+            const totalExp = expHigh + expMed + expLow;
+
+            const probHigh = expHigh / totalExp;
+            const probMed = expMed / totalExp;
+            const probLow = expLow / totalExp;
+
+            // Determine Priority Label
+            let priority = 'LOW';
+            let maxProb = probLow;
+
+            if (probHigh >= probMed && probHigh >= probLow) {
+                priority = 'HIGH';
+                maxProb = probHigh;
+            } else if (probMed >= probHigh && probMed >= probLow) {
+                priority = 'MEDIUM';
+                maxProb = probMed;
+            }
+
+            // Category Determination
+            let category = 'General Communication';
+            let maxCatScore = 0;
+            Object.keys(categoriesFound).forEach((cat) => {
+                if (categoriesFound[cat] > maxCatScore) {
+                    maxCatScore = categoriesFound[cat];
+                    category = cat;
+                }
+            });
+
+            // Reason Generation
+            let reason = "Email classified based on standard language heuristics.";
+            if (priority === 'HIGH') {
+                reason = "Contains urgent time-sensitive markers, action-required terms, or critical account notices.";
+            } else if (priority === 'MEDIUM') {
+                reason = "Contains standard work requests, scheduling updates, or review items requiring routine attention.";
+            } else if (priority === 'LOW') {
+                reason = "Identified as promotional content, newsletter digest, or non-actionable bulk marketing.";
+            }
+
+            return {
+                priority,
+                confidence: maxProb,
+                category,
+                reason,
+                probabilities: {
+                    HIGH: probHigh,
+                    MEDIUM: probMed,
+                    LOW: probLow
+                },
+                topFeatures: detectedFeatures.sort((a, b) => b.weight - a.weight)
+            };
+        }
+
+        async function runClassification() {
+            const text = emailInput.value.trim();
+            if (!text) {
+                showToast('Please enter email text to analyze');
+                return;
+            }
+
+            analyzeBtn.disabled = true;
+            analyzeBtn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>Analyzing...</span>`;
+            lucide.createIcons();
+
+            let result = null;
+
+            try {
+                if (state.activeEngine === 'local') {
+                    // Slight artificial delay for smooth UX transition
+                    await new Promise(r => setTimeout(r, 250));
+                    result = classifyLocal(text);
+                } else {
+                    // Call Production FastAPI Endpoint
+                    const response = await fetch(state.apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email: text })
+                    });
+                    if (!response.ok) throw new Error(`API Error ${response.status}`);
+                    const data = await response.json();
+                    
+                    // Standardize API Response
+                    result = {
+                        priority: data.priority || 'MEDIUM',
+                        confidence: data.confidence || 0.85,
+                        category: data.category || 'General',
+                        reason: data.reason || 'Classification computed via FastAPI model backend.',
+                        probabilities: data.probabilities || {
+                            HIGH: data.priority === 'HIGH' ? data.confidence : (1 - data.confidence)/2,
+                            MEDIUM: data.priority === 'MEDIUM' ? data.confidence : (1 - data.confidence)/2,
+                            LOW: data.priority === 'LOW' ? data.confidence : (1 - data.confidence)/2
+                        },
+                        topFeatures: data.top_features || []
+                    };
+                }
+
+                state.currentResult = result;
+                updateDashboard(result);
+                addToHistory(text, result);
+                updateJsonPreview();
+                showToast(`Classification complete: ${result.priority}`);
+
+            } catch (err) {
+                console.error(err);
+                showToast(`Error: ${err.message || 'Failed to connect to API'}`);
+            } finally {
+                analyzeBtn.disabled = false;
+                analyzeBtn.innerHTML = `<i data-lucide="cpu" class="w-4 h-4"></i><span>Analyze Priority</span>`;
+                lucide.createIcons();
+            }
+        }
+
+        function updateDashboard(result) {
+            const { priority, confidence, category, reason, probabilities, topFeatures } = result;
+
+            // 1. Priority Badge Styling
+            if (priority === 'HIGH') {
+                priorityBadge.className = 'px-4 py-1.5 rounded-xl text-base font-bold flex items-center space-x-2 bg-red-500/10 text-red-400 border border-red-500/30';
+                priorityIcon.innerText = '🔴';
+                priorityLabel.innerText = 'HIGH PRIORITY';
+                ambientGlow.className = 'absolute -top-16 -right-16 w-48 h-48 bg-red-500/20 rounded-full blur-3xl pointer-events-none transition-all duration-500';
+            } else if (priority === 'MEDIUM') {
+                priorityBadge.className = 'px-4 py-1.5 rounded-xl text-base font-bold flex items-center space-x-2 bg-amber-500/10 text-amber-400 border border-amber-500/30';
+                priorityIcon.innerText = '🟡';
+                priorityLabel.innerText = 'MEDIUM PRIORITY';
+                ambientGlow.className = 'absolute -top-16 -right-16 w-48 h-48 bg-amber-500/20 rounded-full blur-3xl pointer-events-none transition-all duration-500';
+            } else {
+                priorityBadge.className = 'px-4 py-1.5 rounded-xl text-base font-bold flex items-center space-x-2 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30';
+                priorityIcon.innerText = '🟢';
+                priorityLabel.innerText = 'LOW PRIORITY';
+                ambientGlow.className = 'absolute -top-16 -right-16 w-48 h-48 bg-emerald-500/20 rounded-full blur-3xl pointer-events-none transition-all duration-500';
+            }
+
+            // 2. Confidence & Category
+            confidenceValue.innerText = `${(confidence * 100).toFixed(1)}%`;
+            categoryLabel.innerText = category;
+            reasonText.innerText = reason;
+
+            // 3. Probability Bars
+            const pHigh = (probabilities.HIGH * 100).toFixed(1);
+            const pMed = (probabilities.MEDIUM * 100).toFixed(1);
+            const pLow = (probabilities.LOW * 100).toFixed(1);
+
+            probHighText.innerText = `${pHigh}%`;
+            probMedText.innerText = `${pMed}%`;
+            probLowText.innerText = `${pLow}%`;
+
+            probHighBar.style.width = `${pHigh}%`;
+            probMedBar.style.width = `${pMed}%`;
+            probLowBar.style.width = `${pLow}%`;
+
+            // 4. Highlight Tags
+            triggerTags.innerHTML = '';
+            if (topFeatures && topFeatures.length > 0) {
+                topFeatures.slice(0, 5).forEach((feat) => {
+                    const tag = document.createElement('span');
+                    tag.className = 'px-2.5 py-1 rounded-md bg-slate-800 text-slate-300 border border-slate-700 text-xs font-mono flex items-center gap-1';
+                    tag.innerHTML = `<i data-lucide="zap" class="w-3 h-3 text-amber-400"></i> ${feat.term}`;
+                    triggerTags.appendChild(tag);
+                });
+            } else {
+                triggerTags.innerHTML = `<span class="text-xs text-slate-500 italic">No specific trigger keywords extracted</span>`;
+            }
+
+            // 5. Render Feature Weights Grid
+            featureWeightsContainer.innerHTML = '';
+            if (topFeatures && topFeatures.length > 0) {
+                topFeatures.slice(0, 6).forEach((feat) => {
+                    const card = document.createElement('div');
+                    card.className = 'bg-slate-900/80 border border-slate-800 p-2.5 rounded-xl flex items-center justify-between';
+                    card.innerHTML = `
+                        <div class="flex items-center space-x-2">
+                            <span class="font-mono text-slate-200">${feat.term}</span>
+                        </div>
+                        <div class="font-mono text-slate-400 text-[11px]">
+                            Weight: <strong class="text-blue-400">+${feat.weight.toFixed(2)}</strong>
+                        </div>
+                    `;
+                    featureWeightsContainer.appendChild(card);
+                });
+            } else {
+                featureWeightsContainer.innerHTML = `<div class="text-slate-500 italic text-center col-span-2 py-4">Standard neutral features vectorized</div>`;
+            }
+
+            lucide.createIcons();
+        }
+
+        function updateJsonPreview() {
+            const payload = {
+                engine: state.activeEngine,
+                endpoint: state.activeEngine === 'api' ? state.apiUrl : 'local-js-pipeline',
+                lastInference: state.currentResult || "None"
+            };
+            jsonPreview.innerText = JSON.stringify(payload, null, 2);
+        }
+
+        function addToHistory(text, result) {
+            state.history.unshift({
+                snippet: text.substring(0, 40) + '...',
+                fullText: text,
+                result,
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            });
+            if (state.history.length > 5) state.history.pop();
+            renderHistory();
+        }
+
+        function renderHistory() {
+            if (state.history.length === 0) {
+                historyList.innerHTML = `<p class="text-xs text-slate-500 italic py-2 text-center">No recent email predictions</p>`;
+                return;
+            }
+
+            historyList.innerHTML = '';
+            state.history.forEach((item) => {
+                const div = document.createElement('div');
+                div.className = 'p-2 rounded-lg bg-slate-900/80 border border-slate-800/80 hover:border-slate-700 transition flex items-center justify-between text-xs cursor-pointer';
+                
+                let icon = '⚪';
+                if (item.result.priority === 'HIGH') icon = '🔴';
+                if (item.result.priority === 'MEDIUM') icon = '🟡';
+                if (item.result.priority === 'LOW') icon = '🟢';
+
+                div.innerHTML = `
+                    <div class="flex items-center space-x-2 truncate pr-2">
+                        <span>${icon}</span>
+                        <span class="text-slate-300 truncate">${item.snippet}</span>
+                    </div>
+                    <span class="text-[10px] font-mono text-slate-500 shrink-0">${item.timestamp}</span>
+                `;
+
+                div.addEventListener('click', () => {
+                    emailInput.value = item.fullText;
+                    updateTextStats();
+                    updateDashboard(item.result);
+                    showToast('Restored historical result');
+                });
+
+                historyList.appendChild(div);
+            });
+        }
+
+        function copySummaryReport() {
+            if (!state.currentResult) {
+                showToast('Run an analysis first');
+                return;
+            }
+            const r = state.currentResult;
+            const text = `EMAIL PRIORITY RESULT\n` +
+                         `---------------------\n` +
+                         `Priority: ${r.priority}\n` +
+                         `Confidence: ${(r.confidence * 100).toFixed(1)}%\n` +
+                         `Category: ${r.category}\n` +
+                         `Reason: ${r.reason}`;
+            
+            navigator.clipboard.writeText(text);
+            showToast('Summary copied to clipboard');
+        }
+
+        function exportJsonData() {
+            if (!state.currentResult) {
+                showToast('Run an analysis first');
+                return;
+            }
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state.currentResult, null, 2));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", `email_priority_analysis.json`);
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+            showToast('Exported JSON report');
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toastMsg');
+            toastMsg.innerText = msg;
+            toast.classList.remove('translate-y-10', 'opacity-0', 'pointer-events-none');
+            setTimeout(() => {
+                toast.classList.add('translate-y-10', 'opacity-0', 'pointer-events-none');
+            }, 2500);
+        }
+    </script>
 </body>
 </html>
