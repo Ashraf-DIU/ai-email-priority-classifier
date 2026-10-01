@@ -7,11 +7,6 @@ Loads the TF-IDF + classifier pipeline trained in
     GET  /            basic info
     GET  /health      liveness check
     POST /predict     {"email": "..."} -> priority + confidence + probabilities
-
-Run locally:
-    uvicorn api.index:app --reload
-Then open:
-    http://localhost:8000/docs
 """
 
 import os
